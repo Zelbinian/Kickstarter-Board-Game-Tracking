@@ -153,8 +153,8 @@ ktData %<>% filter(`Funding Percent` > 99)
 atData %<>% mutate(uniqueid = str_match(`Campaign Link`, "([^?]+).*")[,2] %>% gsub("/", "", .) %>% sub("https?:", "", .))
 ktData %<>% mutate(uniqueid = str_match(URL, "([^?]+).*")[,2] %>% gsub("/", "", .) %>% sub("https?:", "", .))
 
-# subset the Kicktraq Data further to select only the projects that are already in the AirTable data
-ktData %<>% filter(uniqueid %in% atData$uniqueid)
+# subset the AirTable Data further to select only the projects that need updating
+atData %<>% filter(uniqueid %in% ktData$uniqueid)
 
 # UPDATE AIRTABLE
 
