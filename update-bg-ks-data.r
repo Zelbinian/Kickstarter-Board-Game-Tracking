@@ -1,3 +1,4 @@
+library(httr)
 library(rvest)
 library(stringr)
 library(tidyverse)
@@ -5,7 +6,7 @@ library(R.utils)
 
 sleeptime__ <- 5
 
-# get active boardgame projects from Kicktraq
+# GET ACTIVE BG PROJECTS ON KICKTRAQ
 
 extractProjectInfo <- function(textblob, toExtract) {
   extracted <- grep(toExtract, textblob, fixed = TRUE, value = TRUE) %>%
@@ -17,9 +18,7 @@ extractProjectInfo <- function(textblob, toExtract) {
 
 scrapeProjectInfo <- function(ktURLs) {
   
-  fundingGoal <- character(0)
-  amntPledged <- character(0)
-  fundingPcnt <- character(0)
+  fundingPcnt <- integer(0)
   ksURLs <- character(0)
   
   for(url in ktURLs) {
@@ -53,12 +52,9 @@ scrapeProjectInfo <- function(ktURLs) {
         trimws()                            # Trimming white space to make life easier later
       
       # adding new data to the vectors
-      fundingInfo <- extractProjectInfo(projectPageInfo, "Funding:") %>% str_split(" of ") %>% unlist()
-      fundingGoal <- c(fundingGoal, fundingInfo[2])
-      amntPledged <- c(amntPledged, fundingInfo[1])
       fundingPcnt <- c(fundingPcnt, 
                       projectPage %>% html_node("#project-pledgilizer-top a") %>% html_attr("title") %>%
-                        sub("%", "", .) %>% as.numeric()) # this part converts the text pcnt string to an integer
+                        sub("%", "", .) %>% as.integer()) # this part converts the text pcnt string to an integer
       ksURLs <- c(ksURLs, thisKsUrl)
       
       print(paste("There are now",length(ksURLs),"items processed."))
@@ -67,7 +63,7 @@ scrapeProjectInfo <- function(ktURLs) {
     Sys.sleep(sleeptime__) # try not to hammer their server
   }
   
-  return(list("url"=ksURLs, "fundingGoal"=fundingGoal, "amntPledged"=amntPledged, "fundingPcnt"=fundingPcnt))
+  return(list("url"=ksURLs, "fundingPcnt"=fundingPcnt))
 }
 
 fetchProjectsData <- function(content, data) {
@@ -81,8 +77,6 @@ fetchProjectsData <- function(content, data) {
           "URL"=prj_info$url,
           "Description"=content %>% html_nodes(".project-infobox > div:nth-child(2)") %>% html_text() %>%
             gsub("[\r\n]", "", .),
-          "Funding Goal"=prj_info$fundingGoal,
-          "Amount Pledged"=prj_info$amntPledged,
           "Funding Percent"=prj_info$fundingPcnt) %>%
   return()
 }
@@ -95,9 +89,7 @@ scrapeKicktraq <- function(startPage = 1) {
   outputData <- tibble("Title"=character(0),
                        "URL"=character(0),
                        "Description"=character(0),
-                       "Funding Goal"=character(0),
-                       "Amount Pledged"=character(0),
-                       "Funding Percent"=numeric(0))
+                       "Funding Percent"=integer(0))
   
   page <- startPage
   currentUrl <- paste0(ktBgProjListUrl, pageMod, page)
@@ -116,6 +108,53 @@ scrapeKicktraq <- function(startPage = 1) {
     currentUrl <- paste0(ktBgProjListUrl, pageMod, page)
   }
   
+  return(outputData)
+  
 }
 
 ktData <- scrapeKicktraq()
+
+# GET KICKSTARTER PROJECTS CURRENTLY LOGGED IN AIRTABLE
+
+# GET the data
+atResp <- GET("https://api.airtable.com/v0/app39KNHnKwNQrMC4/Campaign%20List?view=Active%20Kickstarters",
+             query = list(view = "Active Kickstarters", api_key = "keyiM4nxBFTZDjAPI", offset = NULL))
+
+if(atResp$status_code == 200) {
+  
+  atJSON <- content(atResp, "text") %>% fromJSON()
+  
+  atData <- tibble("ID"=atJSON$records$id, 
+                   "Campaign Link"=atJSON$records$fields$`Campaign Link`,
+                   "Funded"=atJSON$records$fields$Funded)
+  
+  while(!is.null(atJSON$offset)) {
+    atResp <- GET("https://api.airtable.com/v0/app39KNHnKwNQrMC4/Campaign%20List",
+                  query = list(view = "Active Kickstarters", api_key = "keyiM4nxBFTZDjAPI", offset = atJSON$offset))
+    
+    atJSON <- content(atResp, "text") %>% fromJSON()
+    
+    atData %<>% add_row("ID"=atJSON$records$id, 
+            "Campaign Link"=atJSON$records$fields$`Campaign Link`,
+            "Funded"=atJSON$records$fields$Funded)
+  }
+  
+} else {
+  print(paste("AirTable returned Status Code", atResp$status_code, "for request", atResp$request$url))
+}
+
+# FILTER DATA
+
+# filter data sets, we only want unfunded projects from AirTable, and only funded projects from Kicktraq
+atData %<>% filter(is.na(Funded))
+ktData %<>% filter(`Funding Percent` > 99)
+
+# Create reference IDs for each record in each tibble by sanitizing the URL
+atData %<>% mutate(uniqueid = str_match(`Campaign Link`, "([^?]+).*")[,2] %>% gsub("/", "", .) %>% sub("https?:", "", .))
+ktData %<>% mutate(uniqueid = str_match(URL, "([^?]+).*")[,2] %>% gsub("/", "", .) %>% sub("https?:", "", .))
+
+# subset the Kicktraq Data further to select only the projects that are already in the AirTable data
+ktData %<>% filter(uniqueid %in% atData$uniqueid)
+
+# UPDATE AIRTABLE
+
