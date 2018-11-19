@@ -158,3 +158,18 @@ atData %<>% filter(uniqueid %in% ktData$uniqueid)
 
 # UPDATE AIRTABLE
 
+for(record in atData$ID) {
+  reqUrl <- paste0("https://api.airtable.com/v0/app39KNHnKwNQrMC4/Campaign%20List/", record)
+  resp <- PATCH(reqUrl,
+        query = list(api_key = "keyiM4nxBFTZDjAPI"), 
+        content_type_json(), 
+        body = '{"fields":{"Funded": true}}')
+  
+  # print out req url and status
+  cat(paste("Updating funding status for",resp$request$url))
+  if(resp$status_code == 200) {
+    cat(" was a success.\n")
+  } else {
+    cat(paste(" failed. Error, status code", resp$status_code,"\n"))
+  }
+}
