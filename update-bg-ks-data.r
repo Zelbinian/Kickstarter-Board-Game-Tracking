@@ -187,7 +187,7 @@ updateAirtable <- function(atData) {
                       body = paste('{"fields":{', updateString, '}}'),
                       times = 5)
         
-        warning_for_status(resp)
+        warn_for_status(resp)
         
         Sys.sleep(sleeptime__)
         
