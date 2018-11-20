@@ -4,12 +4,15 @@ library(stringr)
 library(tidyverse)
 library(jsonlite)
 library(magrittr)
+library(lubridate)
 library(R.utils)
+library(tkclt)
 
 sleeptime__ <- 5
 
 # GET ACTIVE BG PROJECTS ON KICKTRAQ
 
+# Helper function for extracting details from Kicktraq's textblob
 extractProjectInfo <- function(textblob, toExtract) {
   extracted <- grep(toExtract, textblob, fixed = TRUE, value = TRUE) %>%
     strsplit(":") %>% unlist() %>% .[2] %>% trimws()
@@ -18,6 +21,8 @@ extractProjectInfo <- function(textblob, toExtract) {
   else return(extracted)
 }
 
+# Helper function that's essentially a switch statement to detect the current state
+# of a project
 determineProjectStatus <- function(attrString) {
   if (grepl("rblue", attrString)) {
     return("Active") 
@@ -30,6 +35,8 @@ determineProjectStatus <- function(attrString) {
   }
 }
 
+# Takes a kicktraq project page (or pages) as input and spits out the relevant project
+# data they contain
 scrapeProjectInfo <- function(ktURLs) {
   
   title <- NULL
@@ -103,12 +110,12 @@ scrapeProjectInfo <- function(ktURLs) {
       
       } 
       
-      # Sys.sleep(sleeptime__) # try not to hammer their server
     } else {
       message_for_status(ktResp, paste("retrieve",url,"from Kicktraq, processing skipped."))
     }
   }
   
+  # put the filled fectors in a named list
   return(list("title"=title, "status"=status, "description"=description, "backers"=backers, 
               "avgDailyPledges"=avgDailyPledges, "avgPledge"=avgPledge, "fundingGoal"=fundingGoal,
               "curFunding"=curFunding, "fundingPcnt"=fundingPcnt))
@@ -150,60 +157,44 @@ queryAirtable <- function() {
   return(atData)
 }
 
-# FILTER DATA
-
-# filter data sets, we only want unfunded projects from AirTable, and only funded projects from Kicktraq
-# atData %<>% filter(is.na(Funded))
-# ktData %<>% filter(`Funding Percent` > 99)
-
-# Create reference IDs for each record in each tibble by sanitizing the URL
-# atData %<>% mutate(uniqueid = str_match(`Campaign Link`, "([^?]+).*")[,2] %>% gsub("/", "", .) %>% sub("https?:", "", .))
-# ktData %<>% mutate(uniqueid = str_match(URL, "([^?]+).*")[,2] %>% gsub("/", "", .) %>% sub("https?:", "", .))
-
-# subset the AirTable Data further to select only the projects that need updating
-# atData %<>% filter(uniqueid %in% ktData$uniqueid)
-
-# UPDATE AIRTABLE
-
-for(record in atData$ID) {
-  reqUrl <- paste0("https://api.airtable.com/v0/app39KNHnKwNQrMC4/Campaign%20List/", record)
-  resp <- PATCH(reqUrl,
-        query = list(api_key = "keyiM4nxBFTZDjAPI"), 
-        content_type_json(), 
-        body = '{"fields":{"Funded": true}}')
-  
-  # print out req url and status
-  cat(paste("Updating funding status for",resp$request$url))
-  if(resp$status_code == 200) {
-    cat(" was a success.\n")
-  } else {
-    cat(paste(" failed. Error, status code", resp$status_code,"\n"))
-  }
+updateAirtable <- function(atData) {
+    
+    pb <- tkProgressBar(min = 0, max = nrow(atData), width = 300, title = "Updating Airtable Data")
+    
+    for(i in 1:nrow(atData)) {
+        
+        setTkProgressBar(pb, i, label = paste(round(i/nrow(atData)*100,2),"% done"))
+        
+        curRecord <- atData[i,]
+        
+        # retrieve the kicktraq page information
+        ktPageData <- curRecord$`Campaign Link` %>% sub("starter", "traq", .) %>% scrapeProjectInfo()
+        
+        # piece together the update string
+        updateString <- paste('"Backers":', ktPageData$backers)
+        
+        if(ktPageData$status == "Cancelled") updateString <- c(updateString, '"Cancelled": true', paste0('"End Date": "', today(), '"'))
+        
+        if(ktPageData$fundingPcnt > 99) updateString <- c(updateString, '"Funded": true')
+        
+        updateString <- paste(updateString, collapse = ", ")
+        
+        reqUrl <- paste0("https://api.airtable.com/v0/app39KNHnKwNQrMC4/Campaign%20List/", curRecord$ID)
+        resp <- RETRY(verb = "PATCH",
+                      url = reqUrl,
+                      query = list(api_key = "keyiM4nxBFTZDjAPI"), 
+                      content_type_json(), 
+                      body = paste('{"fields":{', updateString, '}}'),
+                      times = 5)
+        
+        warning_for_status(resp)
+        
+        Sys.sleep(sleeptime__)
+        
+    }
+    
+    close(pb)
+    
 }
 
-pb <- tkProgressBar(min = 0, max = nrow(atData), width = 300, title = "Updating Airtable Data")
-
-for(i in 1:nrow(atData)) {
-  
-  setTkProgressBar(pb, i, label = paste(round(i/nrow(atData)*100,2),"% done"))
-
-  curRecord <- atData[i,]
-
-  # retrieve the kicktraq page information
-  ktPageData <- curRecord$`Campaign Link` %>% sub("starter", "traq", .) %>% scrapeProjectInfo()
-
-  reqUrl <- paste0("https://api.airtable.com/v0/app39KNHnKwNQrMC4/Campaign%20List/", curRecord$ID)
-  resp <- RETRY(verb = "PATCH",
-                url = reqUrl,
-                query = list(api_key = "keyiM4nxBFTZDjAPI"), 
-                content_type_json(), 
-                body = paste('{"fields":{"Backers": ', ktPageData$backers, '}}'),
-                times = 5)
-  
-  message_for_status(resp)
-
-  Sys.sleep(sleeptime__)
-
-}
-
-close(pb)
+queryAirtable() %>% updateAirtable()
