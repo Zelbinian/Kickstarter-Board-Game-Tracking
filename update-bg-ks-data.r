@@ -2,6 +2,8 @@ library(httr)
 library(rvest)
 library(stringr)
 library(tidyverse)
+library(jsonlite)
+library(magrittr)
 library(R.utils)
 
 sleeptime__ <- 5
@@ -16,54 +18,100 @@ extractProjectInfo <- function(textblob, toExtract) {
   else return(extracted)
 }
 
+determineProjectStatus <- function(attrString) {
+  if (grepl("rblue", attrString)) {
+    return("Active") 
+  } else if (grepl("rgreen", attrString)) {
+    return("Funded")
+  } else if (grepl("rorange", attrString)) {
+    return("Failed") 
+  } else if (grepl("rred", attrString)) {
+    return ("Cancelled")
+  }
+}
+
 scrapeProjectInfo <- function(ktURLs) {
   
-  fundingPcnt <- integer(0)
-  ksURLs <- character(0)
+  title <- NULL
+  status <- NULL
+  description <- NULL
+  backers <- NULL
+  avgDailyPledges <- NULL
+  avgPledge <- NULL
+  fundingGoal <- NULL
+  curFunding <- NULL
+  fundingPcnt <- NULL
   
   for(url in ktURLs) {
     
-    repeat{
-      projectPage <- withTimeout(
-        read_html(paste0("http://www.kicktraq.com",url)), timeout = sleeptime__ * 10
-      )
+    # get data from page
+    ktResp <- RETRY(verb = "GET",
+                         url = url,
+                         body = FALSE,
+                         times = 5) 
+    
+    # if we got a good response, keep going, otherwise harmlessly return the empty lists
+  
+    if (ktResp$status_code == 200) {
       
-      if(!is.null(projectPage)) break;
+      projectPage <- content(ktResp)
+      
+      # If the project doesn't exist or has been deleted, kicktraq doesn't give a 404, instead
+      # they try to dynamically generate a new page. The way to check for this is to check to see
+      # if content that should be there is not
+      if (length(projectPage %>% html_node("#button-backthis")) > 0) {
+        # yay! page exists! 
+        print(paste("Processing", url))
+        
+        projectPageInfo <- projectPage %>%  
+          html_node("#project-info-text") %>%   #selects the div with the project details in it
+          html_text() %>%                     #pulling the text out
+          strsplit('\n', fixed = TRUE) %>%                     #storing each peice of data separately
+          unlist() %>%
+          trimws() %>%                            # Trimming white space to make life easier later
+          .[. != ""]                          # eliminating empty vector entries
+        
+        # adding new data to the vectors
+        title <- 
+          c(title, 
+            projectPage %>% html_node("h2") %>% html_text())
+        status <- 
+          c(status,
+            projectPage %>% html_node(".ribbon-inner") %>% html_attrs() %>% determineProjectStatus())
+        description <- 
+          c(description,
+            projectPageInfo[1])
+        backers <- 
+          c(backers,
+            extractProjectInfo(projectPageInfo, "Backers: ") %>% as.integer())
+        avgDailyPledges <- 
+          c(avgDailyPledges,
+            extractProjectInfo(projectPageInfo, "Pledges: "))
+        avgPledge <- 
+          c(avgPledge,
+            extractProjectInfo(projectPageInfo, "Per Backer: "))
+        fundingGoal <- 
+          c(fundingGoal,
+            extractProjectInfo(projectPageInfo, "Funding: ") %>% str_split(" of ", simplify = TRUE) %>% .[1])
+        curFunding <- 
+          c(curFunding,
+            extractProjectInfo(projectPageInfo, "Funding: ") %>% str_split(" of ", simplify = TRUE) %>% .[2])
+        fundingPcnt <- 
+          c(fundingPcnt, 
+            projectPage %>% html_node("#project-pledgilizer-top a") %>% html_attr("title") %>%
+              sub("%", "", .) %>% as.integer()) # this part converts the text pcnt string to an integer
+      
+      } 
+      
+      # Sys.sleep(sleeptime__) # try not to hammer their server
+    } else {
+      message_for_status(ktResp, paste("retrieve",url,"from Kicktraq, processing skipped."))
     }
-    
-    # first, grab the url for the actual Kickstarter project
-    thisKsUrl <- projectPage %>% html_node("#button-backthis") %>% html_attr("href")
-    
-    # On occasion, the project page does disappear between grabbing the reference to
-    # it on the project listing and trying to access it directly. It's bizarre.
-    # When this happens, Kicktraq does not return a 404. Instead they generate
-    # some dynamic placeholder page. These placeholder pages have none of the 
-    # elements we're looking for, so the way we figure out if this happens is if
-    # one of the attempts to grab them yeilds an empty list.
-    if (length(thisKsUrl) > 0) {
-      # yay! page exists! 
-      print(paste("Processing",thisKsUrl))
-      
-      projectPageInfo <- projectPage %>%  
-        html_node("#project-info-text") %>%   #selects the div with the project details in it
-        html_text() %>%                     #pulling the text out
-        strsplit('\n', fixed = TRUE) %>%                     #storing each peice of data separately
-        unlist() %>%
-        trimws()                            # Trimming white space to make life easier later
-      
-      # adding new data to the vectors
-      fundingPcnt <- c(fundingPcnt, 
-                      projectPage %>% html_node("#project-pledgilizer-top a") %>% html_attr("title") %>%
-                        sub("%", "", .) %>% as.integer()) # this part converts the text pcnt string to an integer
-      ksURLs <- c(ksURLs, thisKsUrl)
-      
-      print(paste("There are now",length(ksURLs),"items processed."))
-    } 
-    
-    Sys.sleep(sleeptime__) # try not to hammer their server
   }
   
-  return(list("url"=ksURLs, "fundingPcnt"=fundingPcnt))
+  return(list("title"=title, "status"=status, "description"=description, "backers"=backers, 
+              "avgDailyPledges"=avgDailyPledges, "avgPledge"=avgPledge, "fundingGoal"=fundingGoal,
+              "curFunding"=curFunding, "fundingPcnt"=fundingPcnt))
 }
 
 fetchProjectsData <- function(content, data) {
@@ -81,80 +129,54 @@ fetchProjectsData <- function(content, data) {
   return()
 }
 
-scrapeKicktraq <- function(startPage = 1) {
-  
-  ktBgProjListUrl <- "http://www.kicktraq.com/categories/games/tabletop%20games"
-  pageMod <- "?page="
-  
-  outputData <- tibble("Title"=character(0),
-                       "URL"=character(0),
-                       "Description"=character(0),
-                       "Funding Percent"=integer(0))
-  
-  page <- startPage
-  currentUrl <- paste0(ktBgProjListUrl, pageMod, page)
-  
-  repeat {
-    webdata <- read_html(currentUrl)
-    
-    print(paste(currentUrl,"has been read."))
-    
-    # if we hit a page with no projects, that means we've consumed everything; break out of the loop
-    if (webdata %>% html_nodes(".project") %>% length() == 0) break
-    
-    outputData <- fetchProjectsData(webdata, outputData)
-    
-    page <- page + 1
-    currentUrl <- paste0(ktBgProjListUrl, pageMod, page)
-  }
-  
-  return(outputData)
-  
-}
-
-ktData <- scrapeKicktraq()
+# ktData <- scrapeKicktraq()
 
 # GET KICKSTARTER PROJECTS CURRENTLY LOGGED IN AIRTABLE
 
-# GET the data
-atResp <- GET("https://api.airtable.com/v0/app39KNHnKwNQrMC4/Campaign%20List?view=Active%20Kickstarters",
-             query = list(view = "Active Kickstarters", api_key = "keyiM4nxBFTZDjAPI", offset = NULL))
-
-if(atResp$status_code == 200) {
+queryAirtable <- function() {
+    
+  atData <- tibble("ID"=character(0), 
+                   "Name"=character(0),
+                   "Campaign Link"=character(0),
+                   "Funded"=logical(0))
   
-  atJSON <- content(atResp, "text") %>% fromJSON()
-  
-  atData <- tibble("ID"=atJSON$records$id, 
-                   "Campaign Link"=atJSON$records$fields$`Campaign Link`,
-                   "Funded"=atJSON$records$fields$Funded)
-  
-  while(!is.null(atJSON$offset)) {
-    atResp <- GET("https://api.airtable.com/v0/app39KNHnKwNQrMC4/Campaign%20List",
-                  query = list(view = "Active Kickstarters", api_key = "keyiM4nxBFTZDjAPI", offset = atJSON$offset))
+  curOffset <- NULL
+    
+  while(nrow(atData) == 0 || !is.null(curOffset)) {
+    
+    atResp <- RETRY(verb = "GET", 
+                    url = "https://api.airtable.com/v0/app39KNHnKwNQrMC4/Campaign%20List",
+                    query = list(view = "Data Entry", api_key = "keyiM4nxBFTZDjAPI", offset = curOffset), 
+                    body = FALSE,
+                    times = 5)
+    
+    stop_for_status(atResp, paste("retrieve AirTable data from", atResp$request$url))
     
     atJSON <- content(atResp, "text") %>% fromJSON()
     
     atData %<>% add_row("ID"=atJSON$records$id, 
-            "Campaign Link"=atJSON$records$fields$`Campaign Link`,
-            "Funded"=atJSON$records$fields$Funded)
+                        "Name"=atJSON$records$fields$Name,
+                        "Campaign Link"=atJSON$records$fields$`Campaign Link`,
+                        "Funded"=atJSON$records$fields$Funded)
+    
+    curOffset <- atJSON$offset
   }
   
-} else {
-  print(paste("AirTable returned Status Code", atResp$status_code, "for request", atResp$request$url))
+  return(atData)
 }
 
 # FILTER DATA
 
 # filter data sets, we only want unfunded projects from AirTable, and only funded projects from Kicktraq
-atData %<>% filter(is.na(Funded))
-ktData %<>% filter(`Funding Percent` > 99)
+# atData %<>% filter(is.na(Funded))
+# ktData %<>% filter(`Funding Percent` > 99)
 
 # Create reference IDs for each record in each tibble by sanitizing the URL
-atData %<>% mutate(uniqueid = str_match(`Campaign Link`, "([^?]+).*")[,2] %>% gsub("/", "", .) %>% sub("https?:", "", .))
-ktData %<>% mutate(uniqueid = str_match(URL, "([^?]+).*")[,2] %>% gsub("/", "", .) %>% sub("https?:", "", .))
+# atData %<>% mutate(uniqueid = str_match(`Campaign Link`, "([^?]+).*")[,2] %>% gsub("/", "", .) %>% sub("https?:", "", .))
+# ktData %<>% mutate(uniqueid = str_match(URL, "([^?]+).*")[,2] %>% gsub("/", "", .) %>% sub("https?:", "", .))
 
 # subset the AirTable Data further to select only the projects that need updating
-atData %<>% filter(uniqueid %in% ktData$uniqueid)
+# atData %<>% filter(uniqueid %in% ktData$uniqueid)
 
 # UPDATE AIRTABLE
 
@@ -172,4 +194,24 @@ for(record in atData$ID) {
   } else {
     cat(paste(" failed. Error, status code", resp$status_code,"\n"))
   }
+}
+
+
+for(i in 1:nrow(head(atData))) {
+  
+  curRecord <- atData[i,]
+
+  # retrieve and disassemble kicktraq page
+
+  ktPage <- RETRY(verb = "GET",
+                  url = curRecord$`Campaign Link` %>% sub("starter", "traq", .),
+                  body = FALSE,
+                  times = 5)
+  
+  print(paste(ktPage$request$url, ktPage$status_code))
+  
+  
+
+  Sys.sleep(sleeptime__)
+  
 }
