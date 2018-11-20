@@ -6,7 +6,7 @@ library(jsonlite)
 library(magrittr)
 library(lubridate)
 library(R.utils)
-library(tkclt)
+library(tcltk)
 
 sleeptime__ <- 5
 
