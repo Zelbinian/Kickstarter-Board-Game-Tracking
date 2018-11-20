@@ -114,23 +114,6 @@ scrapeProjectInfo <- function(ktURLs) {
               "curFunding"=curFunding, "fundingPcnt"=fundingPcnt))
 }
 
-fetchProjectsData <- function(content, data) {
-  
-  # this is the meaty function, the thing that actually processes the scraped data
-  ktURLs <- content %>% html_nodes("h2 a") %>% html_attr("href")
-  prj_info <- scrapeProjectInfo(ktURLs)
-  
-  add_row(data,
-          "Title"=content %>% html_nodes("h2 a") %>% html_text(),
-          "URL"=prj_info$url,
-          "Description"=content %>% html_nodes(".project-infobox > div:nth-child(2)") %>% html_text() %>%
-            gsub("[\r\n]", "", .),
-          "Funding Percent"=prj_info$fundingPcnt) %>%
-  return()
-}
-
-# ktData <- scrapeKicktraq()
-
 # GET KICKSTARTER PROJECTS CURRENTLY LOGGED IN AIRTABLE
 
 queryAirtable <- function() {
@@ -160,6 +143,8 @@ queryAirtable <- function() {
                         "Funded"=atJSON$records$fields$Funded)
     
     curOffset <- atJSON$offset
+    
+    Sys.sleep(.25)
   }
   
   return(atData)
@@ -197,21 +182,34 @@ for(record in atData$ID) {
 }
 
 
-for(i in 1:nrow(head(atData))) {
-  
+for(i in 1:nrow(atData)) {
+
   curRecord <- atData[i,]
 
-  # retrieve and disassemble kicktraq page
+  # retrieve the kicktraq page information
+  ktPageData <- curRecord$`Campaign Link` %>% sub("starter", "traq", .) %>% scrapeProjectInfo()
 
-  ktPage <- RETRY(verb = "GET",
-                  url = curRecord$`Campaign Link` %>% sub("starter", "traq", .),
-                  body = FALSE,
-                  times = 5)
+  reqUrl <- paste0("https://api.airtable.com/v0/app39KNHnKwNQrMC4/Campaign%20List/", curRecord$ID)
+  resp <- RETRY(verb = "PATCH",
+                url = reqUrl,
+                query = list(api_key = "keyiM4nxBFTZDjAPI"), 
+                content_type_json(), 
+                body = paste('{"fields":{"Backers": ', ktPageData$backers, '}}'),
+                times = 5)
   
-  print(paste(ktPage$request$url, ktPage$status_code))
-  
-  
+  message_for_status(resp)
 
   Sys.sleep(sleeptime__)
-  
+
 }
+
+
+pb <- tkProgressBar(min = 0, max = 50, width = 300)
+
+for(i in 1:50) {
+  setTkProgressBar(pb, i, label = paste(i/50*100,"% done"))
+  print("test")
+  Sys.sleep(.5)
+}
+
+close(pb)
