@@ -181,8 +181,11 @@ for(record in atData$ID) {
   }
 }
 
+pb <- tkProgressBar(min = 0, max = nrow(atData), width = 300, title = "Updating Airtable Data")
 
 for(i in 1:nrow(atData)) {
+  
+  setTkProgressBar(pb, i, label = paste(round(i/nrow(atData)*100,2),"% done"))
 
   curRecord <- atData[i,]
 
@@ -201,15 +204,6 @@ for(i in 1:nrow(atData)) {
 
   Sys.sleep(sleeptime__)
 
-}
-
-
-pb <- tkProgressBar(min = 0, max = 50, width = 300)
-
-for(i in 1:50) {
-  setTkProgressBar(pb, i, label = paste(i/50*100,"% done"))
-  print("test")
-  Sys.sleep(.5)
 }
 
 close(pb)
