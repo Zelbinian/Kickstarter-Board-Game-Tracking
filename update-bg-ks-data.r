@@ -45,7 +45,6 @@ scrapeProjectInfo <- function(ktURLs) {
   backers <- NULL
   avgDailyPledges <- NULL
   avgPledge <- NULL
-  fundingGoal <- NULL
   curFunding <- NULL
   fundingPcnt <- NULL
   
@@ -97,12 +96,9 @@ scrapeProjectInfo <- function(ktURLs) {
         avgPledge <- 
           c(avgPledge,
             extractProjectInfo(projectPageInfo, "Per Backer: "))
-        fundingGoal <- 
-          c(fundingGoal,
-            extractProjectInfo(projectPageInfo, "Funding: ") %>% str_split(" of ", simplify = TRUE) %>% .[1])
         curFunding <- 
           c(curFunding,
-            extractProjectInfo(projectPageInfo, "Funding: ") %>% str_split(" of ", simplify = TRUE) %>% .[2])
+            extractProjectInfo(projectPageInfo, "Funding: "))
         fundingPcnt <- 
           c(fundingPcnt, 
             projectPage %>% html_node("#project-pledgilizer-top a") %>% html_attr("title") %>%
@@ -117,13 +113,13 @@ scrapeProjectInfo <- function(ktURLs) {
   
   # put the filled fectors in a named list
   return(list("title"=title, "status"=status, "description"=description, "backers"=backers, 
-              "avgDailyPledges"=avgDailyPledges, "avgPledge"=avgPledge, "fundingGoal"=fundingGoal,
+              "avgDailyPledges"=avgDailyPledges, "avgPledge"=avgPledge, 
               "curFunding"=curFunding, "fundingPcnt"=fundingPcnt))
 }
 
 # GET KICKSTARTER PROJECTS CURRENTLY LOGGED IN AIRTABLE
 
-queryAirtable <- function() {
+queryAirtable <- function(viewChoice = "ActiveKickstarters") {
     
   atData <- tibble("ID"=character(0), 
                    "Name"=character(0),
@@ -136,7 +132,7 @@ queryAirtable <- function() {
     
     atResp <- RETRY(verb = "GET", 
                     url = "https://api.airtable.com/v0/app39KNHnKwNQrMC4/Campaign%20List",
-                    query = list(view = "Data Entry", api_key = "keyiM4nxBFTZDjAPI", offset = curOffset), 
+                    query = list(view = viewChoice, api_key = "keyiM4nxBFTZDjAPI", offset = curOffset), 
                     body = FALSE,
                     times = 5)
     
@@ -171,12 +167,18 @@ updateAirtable <- function(atData) {
         ktPageData <- curRecord$`Campaign Link` %>% sub("starter", "traq", .) %>% scrapeProjectInfo()
         
         # piece together the update string
-        updateString <- paste('"Backers":', ktPageData$backers)
+        updateString <- paste0('"Funding Percent": ', ktPageData$fundingPcnt)
         
+        if(!is.na(ktPageData$curFunding)) updateString <- c(updateString, paste0('"Current Funding": "', ktPageData$curFunding, '"'))
+        
+        updateString <- c(updateString, paste('"Backers":', ktPageData$backers))
+        
+        updateString <- c(updateString, paste0('"Avg Pledge": "' , ktPageData$avgPledge, '"'))
+
         if(ktPageData$status == "Cancelled") updateString <- c(updateString, '"Cancelled": true', paste0('"End Date": "', today(), '"'))
-        
+
         if(ktPageData$fundingPcnt > 99) updateString <- c(updateString, '"Funded": true')
-        
+
         updateString <- paste(updateString, collapse = ", ")
         
         reqUrl <- paste0("https://api.airtable.com/v0/app39KNHnKwNQrMC4/Campaign%20List/", curRecord$ID)
@@ -185,9 +187,10 @@ updateAirtable <- function(atData) {
                       query = list(api_key = "keyiM4nxBFTZDjAPI"), 
                       content_type_json(), 
                       body = paste('{"fields":{', updateString, '}}'),
-                      times = 5)
+                      times = 5,
+                      terminate_on = c(200, 422))
         
-        warn_for_status(resp)
+        warn_for_status(resp, paste("process", ktPageData$title))
         
         Sys.sleep(sleeptime__)
         
@@ -198,3 +201,5 @@ updateAirtable <- function(atData) {
 }
 
 queryAirtable() %>% updateAirtable()
+
+# updateString <- paste0('"Description": "', ktPageData$description %>% gsub("\"", "'", .) %>% gsub("\\|", "-", .), '"')
