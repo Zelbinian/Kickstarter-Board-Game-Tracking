@@ -119,9 +119,9 @@ scrapeProjectInfo <- function(ktURLs) {
 
 # GET KICKSTARTER PROJECTS CURRENTLY LOGGED IN AIRTABLE
 
-queryAirtable <- function(viewChoice = "ActiveKickstarters") {
+queryAirtable <- function(viewChoice = "Active Kickstarters") {
     
-  atData <- tibble("ID"=character(0), 
+  atData <- tibble("ID"=character(0),  
                    "Name"=character(0),
                    "Campaign Link"=character(0),
                    "Funded"=logical(0))
