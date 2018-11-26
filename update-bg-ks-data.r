@@ -119,7 +119,7 @@ scrapeProjectInfo <- function(ktURLs) {
 
 # GET KICKSTARTER PROJECTS CURRENTLY LOGGED IN AIRTABLE
 
-queryAirtable <- function(viewChoice = "Active Kickstarters") {
+queryAirtable <- function(viewChoice = "Active Kickstarters", apiKey = "keyiM4nxBFTZDjAPI") {
     
   # building a blank Tibble to add rows to later
   atData <- tibble("ID"=character(),  
@@ -144,7 +144,7 @@ queryAirtable <- function(viewChoice = "Active Kickstarters") {
     
     atResp <- RETRY(verb = "GET", 
                     url = "https://api.airtable.com/v0/app39KNHnKwNQrMC4/Campaign%20List",
-                    query = list(view = viewChoice, api_key = "keyiM4nxBFTZDjAPI", offset = curOffset), 
+                    query = list(view = viewChoice, api_key = apiKey, offset = curOffset), 
                     body = FALSE,
                     times = 5)
     
@@ -176,7 +176,7 @@ queryAirtable <- function(viewChoice = "Active Kickstarters") {
   return(atData)
 }
 
-updateAirtable <- function(atData) {
+updateAirtable <- function(data, apiKey = "keyiM4nxBFTZDjAPI") {
     
     pb <- tkProgressBar(min = 0, max = nrow(atData), width = 300, title = "Updating Airtable Data")
     
@@ -207,7 +207,7 @@ updateAirtable <- function(atData) {
         reqUrl <- paste0("https://api.airtable.com/v0/app39KNHnKwNQrMC4/Campaign%20List/", curRecord$ID)
         resp <- RETRY(verb = "PATCH",
                       url = reqUrl,
-                      query = list(api_key = "keyiM4nxBFTZDjAPI"), 
+                      query = list(api_key = apiKey), 
                       content_type_json(), 
                       body = paste('{"fields":{', updateString, '}}'),
                       times = 5,
