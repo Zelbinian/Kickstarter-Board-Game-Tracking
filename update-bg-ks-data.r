@@ -136,7 +136,8 @@ queryAirtable <- function(viewChoice = "Active Kickstarters", apiKey = "keyiM4nx
                    "Min Pledge"=numeric(),
                    "Backers"=numeric(),
                    "Funding Percent"=numeric(),
-                   "Total Funding"=numeric())
+                   "Total Funding"=numeric(),
+                   "Cancelled"=logical())
   
   curOffset <- NULL
     
@@ -152,6 +153,18 @@ queryAirtable <- function(viewChoice = "Active Kickstarters", apiKey = "keyiM4nx
     
     atJSON <- content(atResp, "text") %>% fromJSON()
     
+    # AirTable is a little quirky with logical fields; the value will be TRUE if it's true but NA if FALSE.
+    # This gets extra cumbersome to deal with when you aren't sure if the column will be returned at all.
+    # Nested ifelse calls are hard to read and are error prone, so performing these ops here.
+    
+    if(is.null(atJSON$records$fields$Funded)) {
+      atJSON$records$fields$Funded <- NA
+    }
+    
+    if(is.null(atJSON$records$fields$Cancelled)) {
+      atJSON$records$fields$Cancelled <- NA
+    }
+    
     atData %<>% add_row("ID"=atJSON$records$id, 
                         "Name"=atJSON$records$fields$Name,
                         "Description"=atJSON$records$fields$Description,
@@ -162,11 +175,12 @@ queryAirtable <- function(viewChoice = "Active Kickstarters", apiKey = "keyiM4nx
                         "End Date"=atJSON$records$fields$`End Date` %>% ymd(),
                         "Min Players"=atJSON$records$fields$`Min Players`,
                         "Max Players"=atJSON$records$fields$`Max Players`,
-                        "Funded"=atJSON$records$fields$Funded,
+                        "Funded"=ifelse(is.na(atJSON$records$fields$Funded), FALSE, TRUE),
                         "Min Pledge"=atJSON$records$fields$`Min Pledge (USD)`,
                         "Backers"=atJSON$records$fields$Backers,
                         "Funding Percent"=atJSON$records$fields$`Funding Percent`,
-                        "Total Funding"=ifelse(is.null(atJSON$records$fields$`Total Funding`), NA, atJSON$records$fields$`Total Funding`))
+                        "Total Funding"=ifelse(is.null(atJSON$records$fields$`Total Funding`), NA, atJSON$records$fields$`Total Funding`),
+                        "Cancelled"=ifelse(is.na(atJSON$records$fields$Cancelled), FALSE, TRUE))
     
     curOffset <- atJSON$offset
     
