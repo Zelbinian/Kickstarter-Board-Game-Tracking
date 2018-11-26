@@ -121,10 +121,22 @@ scrapeProjectInfo <- function(ktURLs) {
 
 queryAirtable <- function(viewChoice = "Active Kickstarters") {
     
-  atData <- tibble("ID"=character(0),  
-                   "Name"=character(0),
-                   "Campaign Link"=character(0),
-                   "Funded"=logical(0))
+  # building a blank Tibble to add rows to later
+  atData <- tibble("ID"=character(),  
+                   "Name"=character(),
+                   "Description"=character(),
+                   "Metadata"=character(),
+                   "Campaign Link"=character(),
+                   "BGG Link"=character(),
+                   "Launch Date"=ymd(),
+                   "End Date"=ymd(),
+                   "Min Players"=integer(),
+                   "Max Players"=integer(),
+                   "Funded"=logical(),
+                   "Min Pledge"=numeric(),
+                   "Backers"=numeric(),
+                   "Funding Percent"=numeric(),
+                   "Total Funding"=numeric())
   
   curOffset <- NULL
     
@@ -142,8 +154,19 @@ queryAirtable <- function(viewChoice = "Active Kickstarters") {
     
     atData %<>% add_row("ID"=atJSON$records$id, 
                         "Name"=atJSON$records$fields$Name,
+                        "Description"=atJSON$records$fields$Description,
+                        "Metadata"=ifelse(is.null(atJSON$records$fields$Metadata), NA, atJSON$records$fields$Metadata),
                         "Campaign Link"=atJSON$records$fields$`Campaign Link`,
-                        "Funded"=atJSON$records$fields$Funded)
+                        "BGG Link"=atJSON$records$fields$`BGG Link`,
+                        "Launch Date"=atJSON$records$fields$`Launch Date` %>% ymd(),
+                        "End Date"=atJSON$records$fields$`End Date` %>% ymd(),
+                        "Min Players"=atJSON$records$fields$`Min Players`,
+                        "Max Players"=atJSON$records$fields$`Max Players`,
+                        "Funded"=atJSON$records$fields$Funded,
+                        "Min Pledge"=atJSON$records$fields$`Min Pledge (USD)`,
+                        "Backers"=atJSON$records$fields$Backers,
+                        "Funding Percent"=atJSON$records$fields$`Funding Percent`,
+                        "Total Funding"=ifelse(is.null(atJSON$records$fields$`Total Funding`), NA, atJSON$records$fields$`Total Funding`))
     
     curOffset <- atJSON$offset
     
