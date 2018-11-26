@@ -134,7 +134,9 @@ queryAirtable <- function(viewChoice = "Active Kickstarters", apiKey = "keyiM4nx
                    "Max Players"=integer(),
                    "Funded"=logical(),
                    "Min Pledge"=numeric(),
+                   "Avg Pledge"=character(),
                    "Backers"=numeric(),
+                   "Current Funding"=character(),
                    "Funding Percent"=numeric(),
                    "Total Funding"=numeric(),
                    "Cancelled"=logical())
@@ -165,6 +167,10 @@ queryAirtable <- function(viewChoice = "Active Kickstarters", apiKey = "keyiM4nx
       atJSON$records$fields$Cancelled <- NA
     }
     
+    if(is.null(atJSON$records$fields$`Total Funding`)) {
+      atJSON$records$fields$`Total Funding` <- NA
+    }
+    
     atData %<>% add_row("ID"=atJSON$records$id, 
                         "Name"=atJSON$records$fields$Name,
                         "Description"=atJSON$records$fields$Description,
@@ -177,9 +183,11 @@ queryAirtable <- function(viewChoice = "Active Kickstarters", apiKey = "keyiM4nx
                         "Max Players"=atJSON$records$fields$`Max Players`,
                         "Funded"=ifelse(is.na(atJSON$records$fields$Funded), FALSE, TRUE),
                         "Min Pledge"=atJSON$records$fields$`Min Pledge (USD)`,
+                        "Avg Pledge"=atJSON$records$fields$`Avg Pledge`,
                         "Backers"=atJSON$records$fields$Backers,
+                        "Current Funding"=atJSON$records$fields$`Current Funding`,
                         "Funding Percent"=atJSON$records$fields$`Funding Percent`,
-                        "Total Funding"=ifelse(is.null(atJSON$records$fields$`Total Funding`), NA, atJSON$records$fields$`Total Funding`),
+                        "Total Funding"=atJSON$records$fields$`Total Funding`,
                         "Cancelled"=ifelse(is.na(atJSON$records$fields$Cancelled), FALSE, TRUE))
     
     curOffset <- atJSON$offset
