@@ -203,13 +203,13 @@ queryAirtable <- function(viewChoice = "Active Kickstarters", apiKey = "keyiM4nx
 
 updateAirtable <- function(data, apiKey = "keyiM4nxBFTZDjAPI") {
     
-    pb <- tkProgressBar(min = 0, max = nrow(atData), width = 300, title = "Updating Airtable Data")
+    pb <- tkProgressBar(min = 0, max = nrow(data), width = 300, title = "Updating Airtable Data")
     
-    for(i in 1:nrow(atData)) {
+    for(i in 1:nrow(data)) {
         
-        setTkProgressBar(pb, i, label = paste(round(i/nrow(atData)*100,2),"% done"))
+        setTkProgressBar(pb, i, label = paste(round(i/nrow(data)*100,2),"% done"))
         
-        curRecord <- atData[i,]
+        curRecord <- data[i,]
         
         # retrieve the kicktraq page information
         ktPageData <- curRecord$`Campaign Link` %>% sub("starter", "traq", .) %>% scrapeProjectInfo()
