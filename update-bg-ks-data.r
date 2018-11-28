@@ -5,7 +5,8 @@
 library(httr)
 library(rvest)
 library(stringr)
-library(tidyverse)
+library(dplyr)
+library(tibble)
 library(jsonlite)
 library(magrittr)
 library(lubridate)
@@ -164,17 +165,14 @@ queryAirtable <- function(viewChoice = "Active Kickstarters", apiKey = "keyiM4nx
     # Nested ifelse calls are hard to read and are error prone, so performing these ops here.
     
     if(is.null(atJSON$records$fields$Funded)) {
-      print("No Funded field")
       atJSON$records$fields$Funded <- NA
     }
     
     if(is.null(atJSON$records$fields$Cancelled)) {
-      print("No Cancelled field")
       atJSON$records$fields$Cancelled <- NA
     }
     
     if(is.null(atJSON$records$fields$`Total Funding`)) {
-      print("No Total Funding field")
       atJSON$records$fields$`Total Funding` <- NA
     }
     
