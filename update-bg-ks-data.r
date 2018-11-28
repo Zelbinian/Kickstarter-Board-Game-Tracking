@@ -1,3 +1,7 @@
+# I maintain an AirTable database of board games on Kickstarter, past, present, and future.
+# This Rscript helps keep the data fresh by periodically updating it with the newest information
+# from Kicktraq.
+
 library(httr)
 library(rvest)
 library(stringr)
