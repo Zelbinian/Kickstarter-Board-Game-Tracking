@@ -124,7 +124,7 @@ scrapeProjectInfo <- function(ktURLs) {
 
 # GET KICKSTARTER PROJECTS CURRENTLY LOGGED IN AIRTABLE
 
-queryAirtable <- function(viewChoice = "Active Kickstarters", apiKey = "keyiM4nxBFTZDjAPI") {
+queryAirtable <- function(viewChoice = "Active Kickstarters", apiKey) {
     
   # building a blank Tibble to add rows to later
   atData <- tibble("ID"=character(),  
@@ -203,7 +203,7 @@ queryAirtable <- function(viewChoice = "Active Kickstarters", apiKey = "keyiM4nx
   return(atData)
 }
 
-updateAirtable <- function(data, apiKey = "keyiM4nxBFTZDjAPI") {
+updateAirtable <- function(data, apiKey) {
     
     pb <- tkProgressBar(min = 0, max = nrow(data), width = 300, title = "Updating Airtable Data")
     
