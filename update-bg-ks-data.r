@@ -227,9 +227,11 @@ updateAirtable <- function(data, apiKey) {
 
         if(ktPageData$status == "Cancelled") updateString <- c(updateString, '"Cancelled": true', paste0('"End Date": "', today(), '"'))
 
-        if(ktPageData$fundingPcnt > 99) updateString <- c(updateString, '"Funded": true')
-        
-        if(ktPageData$fundingPcnt < 100) updateString <- c(updateString, '"Funded": false')
+        if(ktPageData$fundingPcnt > 99) {
+          updateString <- c(updateString, '"Funded": true')
+        } else {
+          updateString <- c(updateString, '"Funded": false')
+        }
 
         updateString <- paste(updateString, collapse = ", ")
         
