@@ -11,6 +11,9 @@ Then I use the `addToAirtable(gameData, atApiKey)` to view projects one day at a
 
 One other quirk: you have to add games in batches of no more than 10 at a time because of the way AirTable's API works. This is only ever a problem on Tuesdays which has become the Unofficial Publish Your Kickstarter Project day in the board game world. Other than that, there's seldom more than 10 projects of interest on any given day.
 
+### Step 1.5 - Add games from other services (optional)
+The biggest reason why I've been reluctant to make adding games from other services - IndieGogo, GameFound, etc - a regular thing is that they suppress the start date of projects. (Kickstarter does, too, now, but via Kicktraq I can tell.) Knowing the start date and end dates of a project is very important for making sure things end up on the right lists during the right week. GameFound isn't so bad as it's dedicated to board game campaigns and there generally isn't more than 1 or 2 new ones a week. But, I have yet to automate the process of retrieving and updating that data.
+
 ## Step 2 - Add details manually
 There are certain details I've found difficult enough to automate that I just do it manually. This is what takes the most time and time investment definitely scales with the quantity of new projects. I tend to just put on some music and power through it.
 
